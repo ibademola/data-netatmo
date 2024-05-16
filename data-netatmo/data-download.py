@@ -11,6 +11,22 @@ def format_time(seconds):
     h, m = divmod(m, 60)
     return "%d:%02d:%02d" % (h, m, s)
 
+def convert_to_unix_timestamp(date_string, time_string):
+    try:
+        # Parse the date and time strings
+        date_obj = datetime.strptime(date_string, '%Y%m%d')
+        time_obj = datetime.strptime(time_string, '%H%M')
+        
+        # Combine date and time
+        datetime_obj = datetime(date_obj.year, date_obj.month, date_obj.day, time_obj.hour, time_obj.minute)
+        
+        # Convert to UNIX timestamp
+        timestamp = int(datetime_obj.timestamp())
+        return timestamp
+    except ValueError:
+        print("Error: Invalid input format. Please provide date in 'yyyymmdd' and time in 'hhmm' format.")
+        return None
+
 
 def get_access_token(client_id, client_secret, refresh_token):
     # URL for token endpoint
@@ -131,7 +147,13 @@ def load_device_and_module_ids_from_csv(csv_file):
             device_module_ids.append((device_id, module_id))
     return device_module_ids
 
-def save_measurements_to_csv(measurements, filename):
+def save_measurements_to_csv(measurements, device_id, module_id):
+    # Remove ":" from device and module IDs for filename
+    device_id_filename = device_id.replace(":", "")
+    module_id_filename = module_id.replace(":", "")
+    
+    filename = f'{device_id_filename}_{module_id_filename}_measurements.csv'
+    
     with open(filename, 'a', newline='') as csvfile:
         fieldnames = ['acquisition_time', 'temperature', 'humidity', 'pressure']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -141,7 +163,8 @@ def save_measurements_to_csv(measurements, filename):
             writer.writeheader()
 
         acquisition_time = measurements['body'][0]['beg_time']
-        step_time = measurements['body'][0]['step_time']
+        step_time = 86400
+        # step_time = measurements['body'][0]['step_time']
         for entry in measurements['body']:
             for value in entry['value']:
                 row = {
@@ -169,10 +192,11 @@ def get_historical_measurements_batch(access_token, device_id, module_id, scale,
         all_measurements.extend(measurements["body"])
 
         # Update date_begin to fetch the next batch of data
-        date_begin = last_timestamp + measurements["body"][-1]["step_time"]
+        date_begin = last_timestamp + 86400
+        # date_begin = last_timestamp + measurements["body"][-1]["step_time"]
 
         # Save measurements to CSV file
-        save_measurements_to_csv(measurements, f'{device_id}_{module_id}_measurements.csv')
+        save_measurements_to_csv(measurements, device_id, module_id)
 
         # Introduce a delay to avoid hitting rate limits
         time.sleep(1)
@@ -185,25 +209,29 @@ client_secret = "y4UauIiAIWvNiPAeXoWZHgRx9f"
 refresh_token = "6639b0eb66bcd29b9809e8f4|e7a7a25cd535430315068879948c04f0"
 
 access_token = get_access_token(client_id, client_secret, refresh_token)
-# lat_ne = -36.580214
-# lon_ne = 175.189765
-# lat_sw = -37.119948
-# lon_sw = 174.385622
+lat_ne = -36.580214
+lon_ne = 175.189765
+lat_sw = -37.119948
+lon_sw = 174.385622
+
+start_date_stamp = '20000101'
+start_time_stamp = '0230'
+end_date_stamp = '20201231'
+end_time_stamp = '0230'
         
-#ids = get_ids(access_token, lat_ne, lon_ne, lat_sw, lon_sw)
-#csv_file = "netatmo_datatest0009Z.csv"
-#save_netatmo_data_to_csv(ids, csv_file)
+ids = get_ids(access_token, lat_ne, lon_ne, lat_sw, lon_sw)
+csv_file = "netatmo_datatest0009Z.csv"
+save_netatmo_data_to_csv(ids, csv_file)
 
 # Load device IDs and module IDs from the CSV file
-csv_file = r"data-netatmo\revised.csv"
 device_module_ids = load_device_and_module_ids_from_csv(csv_file)
 
 # Iterate through each device ID and module ID pair
 for device_id, module_id in device_module_ids:
-    scale = "1hour"  # Change according to your requirement
+    scale = "1day"  # Change according to your requirement
     types = "Temperature,Humidity,Pressure"  # Add or remove types as needed
-    date_begin = 946684800  # Start timestamp
-    date_end = 1609459199  # End timestamp, set to "last" to retrieve only the last measurement
+    date_begin = convert_to_unix_timestamp(start_date_stamp, start_time_stamp)  # Start timestamp
+    date_end = convert_to_unix_timestamp(end_date_stamp, end_time_stamp)  # End timestamp, set to "last" to retrieve only the last measurement
     limit = 1024  # Default limit
 
     # Fetch historical measurements for the current device ID and module ID pair
